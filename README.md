@@ -1,6 +1,6 @@
 # Lossless Syntax Trees Framework for MoonBit
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/0Ayachi0/lossless-syntax-trees) [![Test Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/0Ayachi0/lossless-syntax-trees)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/0Ayachi0/lossless-syntax-trees/ci.yml)](https://github.com/0Ayachi0/lossless-syntax-trees/actions) [![codecov](https://codecov.io/gh/0Ayachi0/lossless-syntax-trees/branch/main/graph/badge.svg)](https://codecov.io/gh/0Ayachi0/lossless-syntax-trees)
 
 [简体中文](README_zh_CN.md) | English
 
@@ -17,7 +17,7 @@ A powerful, robust syntax tree representation framework for representing languag
 • 📈 **Advanced Path Editing** – Sophisticated path-based editing and structural modification capabilities  
 • 🔍 **Content Sharing (Arena)** – Memory-efficient interning system for large-scale syntax tree operations  
 • 📦 **Comprehensive Trivia Support** – Complete handling of whitespace, comments, and other non-semantic information  
-• 🧪 **Extensive Test Coverage** – 48 comprehensive tests covering all core functionality with 90%+ coverage  
+• 🧪 **Extensive Test Coverage** – 54 comprehensive tests covering all core functionality with 81.93% coverage  
 • 📚 **Complete Documentation** – Detailed usage examples and API reference  
 
 ## 📥 Installation
@@ -471,7 +471,7 @@ build_from_builder(builder: SyntaxBuilder, kind: SyntaxKind, text: String) -> Ra
 
 ## 🧪 Test Coverage
 
-Project includes comprehensive test cases with **90%+ code coverage**:
+Project includes comprehensive test cases with **81.93% code coverage**:
 - ✅ Basic trivia creation and validation tests (6 tests)
 - ✅ Node creation and manipulation tests (8 tests)  
 - ✅ Builder pattern and incremental construction tests (4 tests)
@@ -485,9 +485,9 @@ Project includes comprehensive test cases with **90%+ code coverage**:
 - ✅ Round-trip encoding/decoding tests (3 tests)
 
 ### Test Statistics
-- **Total Tests**: 48 tests
-- **Pass Rate**: 100% (48/48 passed)
-- **Code Coverage**: 90%+ (estimated 850+ lines covered)
+- **Total Tests**: 54 tests
+- **Pass Rate**: 100% (54/54 passed)
+- **Code Coverage**: 81.93% (467/570 lines)
 - **Error Path Coverage**: Comprehensive fault tolerance testing
 - **Edge Case Coverage**: Boundary conditions and malformed input testing
 

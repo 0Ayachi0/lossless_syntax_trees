@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Build and Test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Moonbit
+        uses: hustcer/setup-moonbit@develop
+
+      - name: Check Moonbit version
+        run: |
+          moon version --all
+          moon update
+
+      - name: Build project
+        run: |
+          moon build
+
+      - name: Run tests
+        run: |
+          moon test
+
+      - name: Generate coverage report
+        run: |
+          echo "Running tests with coverage..."
+          moon test --enable-coverage
+          echo "Generating coverage report..."
+          moon coverage report -f cobertura -o coverage.xml
+          echo "Coverage report generated:"
+          ls -la coverage.xml || echo "No coverage file found"
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+          verbose: true
+        continue-on-error: true 

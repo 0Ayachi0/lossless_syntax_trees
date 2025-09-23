@@ -1,6 +1,6 @@
 # MoonBit 无损语法树框架
 
-[![构建状态](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/0Ayachi0/lossless-syntax-trees) [![测试覆盖率](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/0Ayachi0/lossless-syntax-trees)
+[![构建状态](https://img.shields.io/github/actions/workflow/status/0Ayachi0/lossless-syntax-trees/ci.yml)](https://github.com/0Ayachi0/lossless-syntax-trees/actions) [![codecov](https://codecov.io/gh/0Ayachi0/lossless-syntax-trees/branch/main/graph/badge.svg)](https://codecov.io/gh/0Ayachi0/lossless-syntax-trees)
 
 简体中文 | [English](README.md)
 
@@ -17,7 +17,7 @@
 • 📈 **高级路径编辑** – 复杂的基于路径的编辑和结构修改功能  
 • 🔍 **内容共享 (Arena)** – 针对大规模语法树操作的内存高效驻留系统  
 • 📦 **全面的Trivia支持** – 完整处理空白字符、注释和其他非语义信息  
-• 🧪 **广泛的测试覆盖** – 48个综合测试覆盖所有核心功能，测试覆盖率90%+  
+• 🧪 **广泛的测试覆盖** – 54个综合测试覆盖所有核心功能，测试覆盖率81.93%  
 • 📚 **完整文档** – 详细的使用示例和API参考  
 
 ## 📥 安装
@@ -471,7 +471,7 @@ build_from_builder(builder: SyntaxBuilder, kind: SyntaxKind, text: String) -> Ra
 
 ## 🧪 测试覆盖
 
-项目包含全面的测试用例，**测试覆盖率90%+**：
+项目包含全面的测试用例，**测试覆盖率81.93%**：
 - ✅ 基础trivia创建和验证测试 (6个测试)
 - ✅ 节点创建和操作测试 (8个测试)
 - ✅ 构建器模式和增量构建测试 (4个测试)
@@ -485,9 +485,9 @@ build_from_builder(builder: SyntaxBuilder, kind: SyntaxKind, text: String) -> Ra
 - ✅ 往返编码/解码测试 (3个测试)
 
 ### 测试统计
-- **总测试数**: 48个测试
-- **通过率**: 100% (48/48 通过)
-- **代码覆盖率**: 90%+ (估计850+行覆盖)
+- **总测试数**: 54个测试
+- **通过率**: 100% (54/54 通过)
+- **代码覆盖率**: 81.93% (467/570 行)
 - **错误路径覆盖**: 全面的容错测试
 - **边缘情况覆盖**: 边界条件和格式错误输入测试
 

@@ -740,4 +740,73 @@ test "minimal lexer adapter structure" {
     if syntax_text(tok) != src { panic() }
 }
 
+// 覆盖更多分支：节点级前后缀回退（无 token）
+
+test "normalize: node-level trivia preserved when no tokens" {
+    let node = make_node([], [whitespace_trivia(" ")], [newline_trivia("\n")])
+    let normalized = normalize_trivia_ownership(node)
+    let lt = leading_trivia(normalized)
+    let tt = trailing_trivia(normalized)
+    if lt.length() != 1 { panic() }
+    if not (is_whitespace_trivia(lt[0])) { panic() }
+    if tt.length() != 1 { panic() }
+    if not (is_newline_trivia(tt[0])) { panic() }
+}
+
+// 覆盖严格规范步骤1末尾分支：最后一个 token 仍保留换行及其后的内容在 trailing
+
+test "strict: last token keeps newline in trailing" {
+    let t1 = make_token("a", [], [whitespace_trivia(" "), newline_trivia("\n"), comment_trivia("// c")])
+    let root = make_node([t1], [], [])
+    let strict = normalize_trivia_ownership_strict(root)
+    let toks = collect_tokens(strict)
+    let tr = trailing_trivia(toks[0])
+    if tr.length() != 3 { panic() }
+    if not (is_whitespace_trivia(tr[0])) { panic() }
+    if not (is_newline_trivia(tr[1])) { panic() }
+    if not (is_comment_trivia(tr[2])) { panic() }
+}
+
+// 覆盖严格校验器三类错误分支
+
+test "strict validator: trailing newline before last token" {
+    let t1 = make_token("a", [], [newline_trivia("\n")])
+    let t2 = make_token("b", [], [])
+    let root = make_node([t1, t2], [], [])
+    let errs = validate_trivia_ownership_strict(root)
+    let mut found = false
+    for e in errs { if e == "Trailing trivia before last token contains newline" { found = true } }
+    if not (found) { panic() }
+}
+
+test "strict validator: non-first leading without newline" {
+    let t1 = make_token("a", [], [])
+    let t2 = make_token("b", [whitespace_trivia(" ")], [])
+    let root = make_node([t1, t2], [], [])
+    let errs = validate_trivia_ownership_strict(root)
+    let mut found = false
+    for e in errs { if e == "Leading trivia on non-first token has no newline" { found = true } }
+    if not (found) { panic() }
+}
+
+test "strict validator: non-first leading must start with newline" {
+    let t1 = make_token("a", [], [])
+    let t2 = make_token("b", [whitespace_trivia(" "), newline_trivia("\n")], [])
+    let root = make_node([t1, t2], [], [])
+    let errs = validate_trivia_ownership_strict(root)
+    let mut found = false
+    for e in errs { if e == "Leading trivia on non-first token must start with newline" { found = true } }
+    if not (found) { panic() }
+}
+
+// 覆盖 builder 的 mark_missing 分支
+
+test "builder: mark missing" {
+    let b0 = new_builder()
+    let b1 = add_child(b0, make_token("x", [], []))
+    let b2 = mark_missing(b1, true)
+    let node = build_from_builder(b2, "node", "")
+    if not (is_missing(node)) { panic() }
+}
+
 
