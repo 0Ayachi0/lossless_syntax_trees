@@ -1,6 +1,6 @@
 # MoonBit 无损语法树框架
 
-[![构建状态](https://img.shields.io/github/actions/workflow/status/0Ayachi0/lossless-syntax-trees/ci.yml)](https://github.com/0Ayachi0/lossless-syntax-trees/actions) [![codecov](https://codecov.io/gh/0Ayachi0/lossless-syntax-trees/branch/main/graph/badge.svg)](https://codecov.io/gh/0Ayachi0/lossless-syntax-trees)
+[![构建状态](https://img.shields.io/github/actions/workflow/status/0Ayachi0/lossless_syntax_trees/ci.yml?branch=main)](https://github.com/0Ayachi0/lossless_syntax_trees/actions) [![codecov](https://codecov.io/gh/0Ayachi0/lossless_syntax_trees/branch/main/graph/badge.svg)](https://codecov.io/gh/0Ayachi0/lossless_syntax_trees)
 
 简体中文 | [English](README.md)
 
@@ -26,7 +26,7 @@
 # 添加到您的 moon.mod.json 依赖中
 {
   "deps": {
-    "0Ayachi0/lossless-syntax-trees": "0.1.0"
+    "0Ayachi0/lossless_syntax_trees": "0.1.0"
   }
 }
 ```
@@ -551,7 +551,7 @@ moon coverage report -f cobertura -o coverage.xml
 ## 📢 联系与支持
 
 • MoonBit社区: [moonbit-community](https://github.com/moonbitlang/moonbit-community)  
-• GitHub Issues: [报告问题](https://github.com/0Ayachi0/lossless-syntax-trees/issues)  
+• GitHub Issues: [报告问题](https://github.com/0Ayachi0/lossless_syntax_trees/issues)  
 
 ## 📝 更新日志
 

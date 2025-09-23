@@ -1,6 +1,6 @@
 # Lossless Syntax Trees Framework for MoonBit
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/0Ayachi0/lossless-syntax-trees/ci.yml)](https://github.com/0Ayachi0/lossless-syntax-trees/actions) [![codecov](https://codecov.io/gh/0Ayachi0/lossless-syntax-trees/branch/main/graph/badge.svg)](https://codecov.io/gh/0Ayachi0/lossless-syntax-trees)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/0Ayachi0/lossless_syntax_trees/ci.yml?branch=main)](https://github.com/0Ayachi0/lossless_syntax_trees/actions) [![codecov](https://codecov.io/gh/0Ayachi0/lossless_syntax_trees/branch/main/graph/badge.svg)](https://codecov.io/gh/0Ayachi0/lossless_syntax_trees)
 
 [简体中文](README_zh_CN.md) | English
 
@@ -26,7 +26,7 @@ A powerful, robust syntax tree representation framework for representing languag
 # Add to your moon.mod.json dependencies
 {
   "deps": {
-    "0Ayachi0/lossless-syntax-trees": "0.1.0"
+    "0Ayachi0/lossless_syntax_trees": "0.1.0"
   }
 }
 ```
@@ -551,7 +551,7 @@ This project is licensed under the Apache-2.0 License. See the LICENSE file for 
 ## 📢 Contact & Support
 
 • MoonBit Community: [moonbit-community](https://github.com/moonbitlang/moonbit-community)  
-• GitHub Issues: [Report issues](https://github.com/0Ayachi0/lossless-syntax-trees/issues)  
+• GitHub Issues: [Report issues](https://github.com/0Ayachi0/lossless_syntax_trees/issues)  
 
 ## 📝 Changelog
 
