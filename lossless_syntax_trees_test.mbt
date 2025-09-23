@@ -292,7 +292,7 @@ test "leaf node collection" {
 
 test "validation edge cases" {
     // Test empty node validation
-    let empty_text_node = RawSyntax::{ kind: "node", text: "", children: [], leading_trivia: [], trailing_trivia: [], is_missing: false }
+    let empty_text_node = make_node([], [], [])
     let empty_errors = validate_syntax_tree(empty_text_node)
     if empty_errors.length() == 0 { panic() }
     
