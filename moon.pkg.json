@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "moonbitlang/core": "0.1.0"
+  },
+  "warn-list": "-1"
+}
