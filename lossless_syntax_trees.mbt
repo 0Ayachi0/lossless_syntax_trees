@@ -4,12 +4,19 @@
 
 // ==================== Core Data Structures ====================
 
+/// 语法节点种类标识符，用于区分不同类型的语法元素
 pub typealias String as SyntaxKind
 
-// Trivia represents whitespace, comments, and other non-semantic information
+/// Trivia 表示源码中的非语义信息（空白、注释等）
+/// 格式: (kind, text) 其中 kind 为 trivia 类型，text 为实际文本内容
 pub typealias (String, String) as Trivia  // (kind, text)
 
-// RawSyntax is the core immutable, shareable syntax node storage
+/// RawSyntax 是核心的不可变、可共享的语法节点存储结构
+/// 不变式: 
+/// - token 节点的 children 数组为空，text 包含实际内容
+/// - node 节点的 text 为空字符串，children 包含子节点
+/// - trivia 归属明确: leading_trivia 属于当前节点，trailing_trivia 在节点后
+/// - 结构不可变，所有修改操作返回新节点
 pub struct RawSyntax {
     kind: SyntaxKind
     text: String
@@ -20,45 +27,72 @@ pub struct RawSyntax {
 }
 // (kind, text, children, leading_trivia, trailing_trivia, is_missing)
 
-// SyntaxBuilder for incremental syntax tree construction
+/// SyntaxBuilder 用于增量构建语法树
+/// 格式: (children, leading_trivia, trailing_trivia, is_missing)
+/// 典型流程: new_builder -> add_child* -> add_trivia* -> build_from_builder
 pub typealias (Array[RawSyntax], Array[Trivia], Array[Trivia], Bool) as SyntaxBuilder
 // (children, leading_trivia, trailing_trivia, is_missing)
 
-// Syntax wrapper for type-safe API
+/// Syntax 为类型安全的语法节点包装器
+/// 格式: (raw, node_type) 提供额外的类型信息用于类型检查
 pub typealias (RawSyntax, String) as Syntax  // (raw, node_type)
 
-// TokenRange maps a token to [start, end) offsets in printed text
+/// TokenRange 将 token 映射到打印文本中的字符偏移范围
+/// 格式: (token, start_offset, end_offset) 表示 [start, end) 半开区间
 pub typealias (RawSyntax, Int, Int) as TokenRange
 
 // ==================== Trivia Creation Functions ====================
 
+/// 创建空白 trivia（空格、制表符等）
+/// - text: 空白字符文本
+/// 返回: 空白类型的 trivia
 pub fn whitespace_trivia(text: String) -> Trivia {
     ("whitespace", text)
 }
 
+/// 创建行内注释 trivia
+/// - text: 注释文本（通常包含 // 或 # 等前缀）
+/// 返回: 注释类型的 trivia
 pub fn comment_trivia(text: String) -> Trivia {
     ("comment", text)
 }
 
+/// 创建换行 trivia
+/// - text: 换行字符（如 \n, \r\n 等）
+/// 返回: 换行类型的 trivia
 pub fn newline_trivia(text: String) -> Trivia {
     ("newline", text)
 }
 
+/// 创建块注释 trivia
+/// - text: 块注释文本（通常包含 /* */ 等）
+/// 返回: 块注释类型的 trivia
 pub fn block_comment_trivia(text: String) -> Trivia {
     ("block_comment", text)
 }
 
+/// 创建文档注释 trivia
+/// - text: 文档注释文本（通常包含 /// 或 /** */ 等）
+/// 返回: 文档注释类型的 trivia
 pub fn doc_comment_trivia(text: String) -> Trivia {
     ("doc_comment", text)
 }
 
+/// 创建 shebang trivia（如脚本文件开头的 #!/bin/sh）
+/// - text: shebang 文本
+/// 返回: shebang 类型的 trivia
 pub fn shebang_trivia(text: String) -> Trivia {
     ("shebang", text)
 }
 
 // ==================== RawSyntax Creation Functions ====================
 
-// Create token node
+/// 创建一个 token（叶子）节点，不包含子节点
+/// - text: token 的文本内容
+/// - leading_trivia: 前导 trivia 数组
+/// - trailing_trivia: 后置 trivia 数组
+/// 返回: 表示该 token 的 RawSyntax
+/// 复杂度: O(1)
 pub fn make_token(text: String, leading_trivia: Array[Trivia], trailing_trivia: Array[Trivia]) -> RawSyntax {
     RawSyntax::{
         kind: "token",
@@ -70,7 +104,12 @@ pub fn make_token(text: String, leading_trivia: Array[Trivia], trailing_trivia: 
     }
 }
 
-// Create syntax node
+/// 创建一个语法节点（非叶子），包含子节点
+/// - children: 子节点数组
+/// - leading_trivia: 前导 trivia 数组
+/// - trailing_trivia: 后置 trivia 数组
+/// 返回: 表示该语法节点的 RawSyntax
+/// 复杂度: O(1)
 pub fn make_node(children: Array[RawSyntax], leading_trivia: Array[Trivia], trailing_trivia: Array[Trivia]) -> RawSyntax {
     RawSyntax::{
         kind: "node",
@@ -82,7 +121,9 @@ pub fn make_node(children: Array[RawSyntax], leading_trivia: Array[Trivia], trai
     }
 }
 
-// Create missing node
+/// 创建一个缺失节点（用于表示语法错误或未解析的语法）
+/// 返回: 表示缺失节点的 RawSyntax
+/// 复杂度: O(1)
 pub fn make_missing() -> RawSyntax {
     RawSyntax::{
         kind: "missing",
@@ -94,7 +135,10 @@ pub fn make_missing() -> RawSyntax {
     }
 }
 
-// Create error node
+/// 创建一个错误节点，用于表示语法错误
+/// - text: 错误描述文本
+/// 返回: 表示错误的 RawSyntax
+/// 复杂度: O(1)
 pub fn make_error(text: String) -> RawSyntax {
     RawSyntax::{
         kind: "error",
@@ -108,80 +152,152 @@ pub fn make_error(text: String) -> RawSyntax {
 
 // ==================== RawSyntax Access Functions ====================
 
+/// 获取语法节点的种类
+/// - raw: 语法节点
+/// 返回: 语法节点的种类标识符
+/// 复杂度: O(1)
 pub fn syntax_kind(raw: RawSyntax) -> SyntaxKind {
     raw.kind
 }
 
+/// 获取语法节点的文本内容
+/// - raw: 语法节点
+/// 返回: 语法节点的文本内容
+/// 复杂度: O(1)
 pub fn syntax_text(raw: RawSyntax) -> String {
     raw.text
 }
 
+/// 获取语法节点的子节点数组
+/// - raw: 语法节点
+/// 返回: 语法节点的子节点数组
+/// 复杂度: O(1)
 pub fn syntax_children(raw: RawSyntax) -> Array[RawSyntax] {
     raw.children
 }
 
+/// 获取语法节点的前导 trivia 数组
+/// - raw: 语法节点
+/// 返回: 语法节点的前导 trivia 数组
+/// 复杂度: O(1)
 pub fn leading_trivia(raw: RawSyntax) -> Array[Trivia] {
     raw.leading_trivia
 }
 
+/// 获取语法节点的后置 trivia 数组
+/// - raw: 语法节点
+/// 返回: 语法节点的后置 trivia 数组
+/// 复杂度: O(1)
 pub fn trailing_trivia(raw: RawSyntax) -> Array[Trivia] {
     raw.trailing_trivia
 }
 
+/// 检查语法节点是否为缺失节点
+/// - raw: 语法节点
+/// 返回: 如果节点为缺失节点则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_missing(raw: RawSyntax) -> Bool {
     raw.is_missing
 }
 
 // ==================== Syntax Type Checking Functions ====================
 
+/// 检查语法节点是否为 token 节点
+/// - raw: 语法节点
+/// 返回: 如果节点为 token 则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_token(raw: RawSyntax) -> Bool {
     syntax_kind(raw) == "token"
 }
 
+/// 检查语法节点是否为语法节点（非叶子）
+/// - raw: 语法节点
+/// 返回: 如果节点为语法节点则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_node(raw: RawSyntax) -> Bool {
     syntax_kind(raw) == "node"
 }
 
+/// 检查语法节点是否为错误节点
+/// - raw: 语法节点
+/// 返回: 如果节点为错误节点则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_error(raw: RawSyntax) -> Bool {
     syntax_kind(raw) == "error"
 }
 
+/// 检查语法节点是否完整（非缺失）
+/// - raw: 语法节点
+/// 返回: 如果节点完整则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_complete(raw: RawSyntax) -> Bool {
     not (is_missing(raw))
 }
 
 // ==================== Trivia Checking Functions ====================
 
+/// 检查 trivia 是否为空白 trivia
+/// - trivia: trivia 对象
+/// 返回: 如果 trivia 为空白则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_whitespace_trivia(trivia: Trivia) -> Bool {
     trivia.0 == "whitespace"
 }
 
+/// 检查 trivia 是否为注释 trivia
+/// - trivia: trivia 对象
+/// 返回: 如果 trivia 为注释则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_comment_trivia(trivia: Trivia) -> Bool {
     trivia.0 == "comment"
 }
 
+/// 检查 trivia 是否为换行 trivia
+/// - trivia: trivia 对象
+/// 返回: 如果 trivia 为换行则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_newline_trivia(trivia: Trivia) -> Bool {
     trivia.0 == "newline"
 }
 
+/// 检查 trivia 是否为块注释 trivia
+/// - trivia: trivia 对象
+/// 返回: 如果 trivia 为块注释则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_block_comment_trivia(trivia: Trivia) -> Bool {
     trivia.0 == "block_comment"
 }
 
+/// 检查 trivia 是否为文档注释 trivia
+/// - trivia: trivia 对象
+/// 返回: 如果 trivia 为文档注释则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_doc_comment_trivia(trivia: Trivia) -> Bool {
     trivia.0 == "doc_comment"
 }
 
+/// 检查 trivia 是否为 shebang trivia
+/// - trivia: trivia 对象
+/// 返回: 如果 trivia 为 shebang 则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_shebang_trivia(trivia: Trivia) -> Bool {
     trivia.0 == "shebang"
 }
 
 // ==================== Child Access Functions ====================
 
+/// 获取语法节点的子节点数量
+/// - raw: 语法节点
+/// 返回: 子节点数量
+/// 复杂度: O(1)
 pub fn child_count(raw: RawSyntax) -> Int {
     array_length(syntax_children(raw))
 }
 
+/// 获取语法节点的第一个子节点
+/// - raw: 语法节点
+/// 返回: 第一个子节点，如果不存在则返回 None
+/// 复杂度: O(1)
 pub fn first_child(raw: RawSyntax) -> Option[RawSyntax] {
     let children = syntax_children(raw)
     match children {
@@ -190,6 +306,10 @@ pub fn first_child(raw: RawSyntax) -> Option[RawSyntax] {
     }
 }
 
+/// 获取语法节点的最后一个子节点
+/// - raw: 语法节点
+/// 返回: 最后一个子节点，如果不存在则返回 None
+/// 复杂度: O(1)
 pub fn last_child(raw: RawSyntax) -> Option[RawSyntax] {
     let children = syntax_children(raw)
     match children {
@@ -200,6 +320,12 @@ pub fn last_child(raw: RawSyntax) -> Option[RawSyntax] {
 
 // ==================== With APIs (Immutable Setters) ====================
 
+/// 替换语法节点的指定子节点
+/// - raw: 语法节点
+/// - index: 要替换的子节点索引
+/// - new_child: 新的子节点
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(n)，其中 n 是子节点数量
 pub fn with_child(raw: RawSyntax, index: Int, new_child: RawSyntax) -> RawSyntax {
     let children = syntax_children(raw)
     let new_children = replace_child_at_index(children, index, new_child)
@@ -213,6 +339,11 @@ pub fn with_child(raw: RawSyntax, index: Int, new_child: RawSyntax) -> RawSyntax
     }
 }
 
+/// 替换语法节点的前导 trivia
+/// - raw: 语法节点
+/// - trivia: 新的前导 trivia 数组
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(1)
 pub fn with_leading_trivia(raw: RawSyntax, trivia: Array[Trivia]) -> RawSyntax {
     RawSyntax::{
         kind: syntax_kind(raw),
@@ -224,6 +355,11 @@ pub fn with_leading_trivia(raw: RawSyntax, trivia: Array[Trivia]) -> RawSyntax {
     }
 }
 
+/// 替换语法节点的后置 trivia
+/// - raw: 语法节点
+/// - trivia: 新的后置 trivia 数组
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(1)
 pub fn with_trailing_trivia(raw: RawSyntax, trivia: Array[Trivia]) -> RawSyntax {
     RawSyntax::{
         kind: syntax_kind(raw),
@@ -235,6 +371,11 @@ pub fn with_trailing_trivia(raw: RawSyntax, trivia: Array[Trivia]) -> RawSyntax 
     }
 }
 
+/// 替换语法节点的文本内容
+/// - raw: 语法节点
+/// - text: 新的文本内容
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(1)
 pub fn with_text(raw: RawSyntax, text: String) -> RawSyntax {
     RawSyntax::{
         kind: syntax_kind(raw),
@@ -248,29 +389,58 @@ pub fn with_text(raw: RawSyntax, text: String) -> RawSyntax {
 
 // ==================== Builder APIs ====================
 
+/// 创建一个新的 SyntaxBuilder
+/// 返回: 初始化后的 SyntaxBuilder
+/// 复杂度: O(1)
 pub fn new_builder() -> SyntaxBuilder {
     ([], [], [], false)
 }
 
+/// 向 SyntaxBuilder 添加一个子节点
+/// - builder: SyntaxBuilder
+/// - child: 要添加的子节点
+/// 返回: 添加子节点后的 SyntaxBuilder
+/// 复杂度: O(1)
 pub fn add_child(builder: SyntaxBuilder, child: RawSyntax) -> SyntaxBuilder {
     let new_children = builder.0 + [child]
     (new_children, builder.1, builder.2, builder.3)
 }
 
+/// 向 SyntaxBuilder 添加前导 trivia
+/// - builder: SyntaxBuilder
+/// - trivia: 要添加的前导 trivia
+/// 返回: 添加前导 trivia 后的 SyntaxBuilder
+/// 复杂度: O(1)
 pub fn add_leading_trivia(builder: SyntaxBuilder, trivia: Trivia) -> SyntaxBuilder {
     let new_trivia = [trivia] + builder.1
     (builder.0, new_trivia, builder.2, builder.3)
 }
 
+/// 向 SyntaxBuilder 添加后置 trivia
+/// - builder: SyntaxBuilder
+/// - trivia: 要添加的后置 trivia
+/// 返回: 添加后置 trivia 后的 SyntaxBuilder
+/// 复杂度: O(1)
 pub fn add_trailing_trivia(builder: SyntaxBuilder, trivia: Trivia) -> SyntaxBuilder {
     let new_trivia = [trivia] + builder.2
     (builder.0, builder.1, new_trivia, builder.3)
 }
 
+/// 标记 SyntaxBuilder 的缺失状态
+/// - builder: SyntaxBuilder
+/// - missing: 新的缺失状态
+/// 返回: 标记缺失状态后的 SyntaxBuilder
+/// 复杂度: O(1)
 pub fn mark_missing(builder: SyntaxBuilder, missing: Bool) -> SyntaxBuilder {
     (builder.0, builder.1, builder.2, missing)
 }
 
+/// 从 SyntaxBuilder 构建一个 RawSyntax 节点
+/// - builder: SyntaxBuilder
+/// - kind: 语法节点的种类
+/// - text: 语法节点的文本内容
+/// 返回: 构建后的 RawSyntax 节点
+/// 复杂度: O(1)
 pub fn build_from_builder(builder: SyntaxBuilder, kind: SyntaxKind, text: String) -> RawSyntax {
     RawSyntax::{
         kind: kind,
@@ -284,20 +454,37 @@ pub fn build_from_builder(builder: SyntaxBuilder, kind: SyntaxKind, text: String
 
 // ==================== Syntax Wrapper Functions ====================
 
+/// 创建一个 Syntax 包装器
+/// - raw: 原始 RawSyntax 节点
+/// - node_type: 语法节点的类型标识符
+/// 返回: 包装后的 Syntax 对象
+/// 复杂度: O(1)
 pub fn syntax(raw: RawSyntax, node_type: String) -> Syntax {
     (raw, node_type)
 }
 
+/// 从 Syntax 对象获取原始 RawSyntax 节点
+/// - syntax: Syntax 对象
+/// 返回: 原始 RawSyntax 节点
+/// 复杂度: O(1)
 pub fn raw_syntax(syntax: Syntax) -> RawSyntax {
     syntax.0
 }
 
+/// 从 Syntax 对象获取语法节点的类型
+/// - syntax: Syntax 对象
+/// 返回: 语法节点的类型标识符
+/// 复杂度: O(1)
 pub fn node_type(syntax: Syntax) -> String {
     syntax.1
 }
 
 // ==================== Text Reconstruction ====================
 
+/// 重建语法树的文本表示
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 重建后的文本字符串
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn rebuild_text(raw: RawSyntax) -> String {
     if is_node(raw) {
         let children = syntax_children(raw)
@@ -313,6 +500,10 @@ pub fn rebuild_text(raw: RawSyntax) -> String {
     }
 }
 
+/// 重建 trivia 列表的文本表示
+/// - trivia_list: trivia 列表
+/// 返回: 重建后的文本字符串
+/// 复杂度: O(n * m)，其中 n 是 trivia 数量，m 是每个 trivia 的文本长度
 fn rebuild_trivia_text(trivia_list: Array[Trivia]) -> String {
     let mut result = ""
     for trivia in trivia_list {
@@ -323,6 +514,10 @@ fn rebuild_trivia_text(trivia_list: Array[Trivia]) -> String {
 
 // ==================== Utility Functions ====================
 
+/// 计算数组的长度
+/// - list: 数组
+/// 返回: 数组长度
+/// 复杂度: O(n)，其中 n 是数组元素数量
 fn array_length(list: Array[RawSyntax]) -> Int {
     let mut count = 0
     for _ in list {
@@ -331,6 +526,12 @@ fn array_length(list: Array[RawSyntax]) -> Int {
     count
 }
 
+/// 替换数组中的指定元素
+/// - children: 原始子节点数组
+/// - index: 要替换的元素索引
+/// - new_child: 新的子节点
+/// 返回: 替换后的新数组
+/// 复杂度: O(n)，其中 n 是数组长度
 fn replace_child_at_index(children: Array[RawSyntax], index: Int, new_child: RawSyntax) -> Array[RawSyntax] {
     let mut result = []
     let mut current_index = 0
@@ -347,6 +548,11 @@ fn replace_child_at_index(children: Array[RawSyntax], index: Int, new_child: Raw
 
 // ==================== Search Functions ====================
 
+/// 查找语法树中所有指定种类的节点
+/// - raw: 根语法节点
+/// - kind: 要查找的节点种类
+/// 返回: 所有找到的节点数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn find_nodes_of_kind(raw: RawSyntax, kind: SyntaxKind) -> Array[RawSyntax] {
     let mut result = []
     if syntax_kind(raw) == kind {
@@ -362,6 +568,11 @@ pub fn find_nodes_of_kind(raw: RawSyntax, kind: SyntaxKind) -> Array[RawSyntax] 
     result
 }
 
+/// 查找语法树中所有文本内容匹配的 token 节点
+/// - raw: 根语法节点
+/// - text: 要匹配的文本内容
+/// 返回: 所有找到的 token 节点数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn find_tokens_with_text(raw: RawSyntax, text: String) -> Array[RawSyntax] {
     let mut result = []
     if is_token(raw) {
@@ -378,6 +589,10 @@ pub fn find_tokens_with_text(raw: RawSyntax, text: String) -> Array[RawSyntax] {
     result
 }
 
+/// 查找语法树中的错误节点
+/// - raw: 根语法节点
+/// 返回: 所有找到的错误节点数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn find_error_nodes(raw: RawSyntax) -> Array[RawSyntax] {
     let mut result = []
     if is_error(raw) {
@@ -394,6 +609,10 @@ pub fn find_error_nodes(raw: RawSyntax) -> Array[RawSyntax] {
 
 // ==================== Tree Traversal Functions ====================
 
+/// 前序遍历语法树
+/// - raw: 根语法节点
+/// 返回: 遍历得到的节点数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn preorder_traversal(raw: RawSyntax) -> Array[RawSyntax] {
     let mut result = [raw]
     let children = syntax_children(raw)
@@ -404,6 +623,10 @@ pub fn preorder_traversal(raw: RawSyntax) -> Array[RawSyntax] {
     result
 }
 
+/// 后序遍历语法树
+/// - raw: 根语法节点
+/// 返回: 遍历得到的节点数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn postorder_traversal(raw: RawSyntax) -> Array[RawSyntax] {
     let mut result = []
     let children = syntax_children(raw)
@@ -415,6 +638,10 @@ pub fn postorder_traversal(raw: RawSyntax) -> Array[RawSyntax] {
     result
 }
 
+/// 广度优先遍历语法树
+/// - raw: 根语法节点
+/// 返回: 遍历得到的节点数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn breadth_first_traversal(raw: RawSyntax) -> Array[RawSyntax] {
     let mut result = []
     let queue = @queue.of([raw])
@@ -431,6 +658,10 @@ pub fn breadth_first_traversal(raw: RawSyntax) -> Array[RawSyntax] {
 
 // ==================== Node Validation Functions ====================
 
+/// 验证语法树的完整性
+/// - raw: 根语法节点
+/// 返回: 发现的错误信息数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn validate_syntax_tree(raw: RawSyntax) -> Array[String] {
     let mut errors = []
     
@@ -460,6 +691,10 @@ pub fn validate_syntax_tree(raw: RawSyntax) -> Array[String] {
     errors
 }
 
+/// 计算语法树中的节点总数
+/// - raw: 根语法节点
+/// 返回: 节点总数
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn count_nodes(raw: RawSyntax) -> Int {
     let mut count = 1
     let children = syntax_children(raw)
@@ -469,6 +704,10 @@ pub fn count_nodes(raw: RawSyntax) -> Int {
     count
 }
 
+/// 计算语法树中的 token 总数
+/// - raw: 根语法节点
+/// 返回: token 总数
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn count_tokens(raw: RawSyntax) -> Int {
     let mut count = 0
     if is_token(raw) {
@@ -484,6 +723,10 @@ pub fn count_tokens(raw: RawSyntax) -> Int {
 
 // ==================== Advanced Trivia Functions ====================
 
+/// 检查语法节点是否包含换行 trivia
+/// - raw: 语法节点
+/// 返回: 如果包含换行则返回 true，否则返回 false
+/// 复杂度: O(n * m)，其中 n 是前导 trivia 数量，m 是每个前导 trivia 的文本长度
 pub fn has_newline_trivia(raw: RawSyntax) -> Bool {
     let leading = leading_trivia(raw)
     let trailing = trailing_trivia(raw)
@@ -503,6 +746,10 @@ pub fn has_newline_trivia(raw: RawSyntax) -> Bool {
     false
 }
 
+/// 计算语法节点中的注释 trivia 总数
+/// - raw: 语法节点
+/// 返回: 注释 trivia 总数
+/// 复杂度: O(n * m)，其中 n 是前导 trivia 数量，m 是每个前导 trivia 的文本长度
 pub fn count_comment_trivia(raw: RawSyntax) -> Int {
     let mut count = 0
     
@@ -524,6 +771,10 @@ pub fn count_comment_trivia(raw: RawSyntax) -> Int {
     count
 }
 
+/// 提取语法节点及其所有子节点中的所有 trivia
+/// - raw: 语法节点
+/// 返回: 提取到的所有 trivia 数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn extract_all_trivia(raw: RawSyntax) -> Array[Trivia] {
     let mut result = []
     
@@ -545,6 +796,10 @@ pub fn extract_all_trivia(raw: RawSyntax) -> Array[Trivia] {
 
 // ==================== Trivia Ownership Normalization ====================
 
+/// 规范化语法节点的 trivia 所有权
+/// - raw: 原始语法节点
+/// 返回: 规范化后的语法节点
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn normalize_trivia_ownership(raw: RawSyntax) -> RawSyntax {
     if is_token(raw) || is_error(raw) || is_missing(raw) {
         return raw
@@ -604,6 +859,11 @@ pub fn normalize_trivia_ownership(raw: RawSyntax) -> RawSyntax {
     new_node
 }
 
+/// 将 trivia 添加到第一个 token 的前导
+/// - raw: 语法节点
+/// - trivias: 要添加的前导 trivia 数组
+/// 返回: 添加后的语法节点，以及是否成功应用
+/// 复杂度: O(n)，其中 n 是子节点数量
 fn prepend_trivia_to_first_token_impl(raw: RawSyntax, trivias: Array[Trivia]) -> (RawSyntax, Bool) {
     if is_token(raw) {
         let new_leading = trivias + leading_trivia(raw)
@@ -634,6 +894,11 @@ fn prepend_trivia_to_first_token_impl(raw: RawSyntax, trivias: Array[Trivia]) ->
     }
 }
 
+/// 将 trivia 添加到最后一个 token 的后置
+/// - raw: 语法节点
+/// - trivias: 要添加的后置 trivia 数组
+/// 返回: 添加后的语法节点，以及是否成功应用
+/// 复杂度: O(n)，其中 n 是子节点数量
 fn append_trivia_to_last_token_impl(raw: RawSyntax, trivias: Array[Trivia]) -> (RawSyntax, Bool) {
     if is_token(raw) {
         let new_trailing = trailing_trivia(raw) + trivias
@@ -666,6 +931,10 @@ fn append_trivia_to_last_token_impl(raw: RawSyntax, trivias: Array[Trivia]) -> (
     }
 }
 
+/// 反转数组
+/// - arr: 原始数组
+/// 返回: 反转后的数组
+/// 复杂度: O(n)，其中 n 是数组长度
 fn reverse_array_raw(arr: Array[RawSyntax]) -> Array[RawSyntax] {
     let mut result = []
     for item in arr {
@@ -674,6 +943,10 @@ fn reverse_array_raw(arr: Array[RawSyntax]) -> Array[RawSyntax] {
     result
 }
 
+/// 以无损方式打印语法树
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 打印后的文本字符串
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn lossless_print(raw: RawSyntax) -> String {
     let normalized = normalize_trivia_ownership(raw)
     rebuild_text(normalized)
@@ -684,15 +957,27 @@ pub fn lossless_print(raw: RawSyntax) -> String {
 // Tokenize source by splitting on whitespace (space, tab, newline) only.
 // Whitespace and newlines become Trivia; all other runs become token text.
 // This is a minimal roundtrip tokenizer for demonstration and tests.
+/// 使用最小空白分词器对源码进行分词
+/// - source: 源码字符串
+/// 返回: 分词后的语法树根节点
+/// 复杂度: O(n * m)，其中 n 是源码长度，m 是每个 token 的文本长度
 pub fn tokenize_whitespace_only(source: String) -> RawSyntax {
     tokenize_whitespace_split(source)
 }
 
+/// 最小空白分词器实现
+/// - source: 源码字符串
+/// 返回: 分词后的语法树根节点
+/// 复杂度: O(n * m)，其中 n 是源码长度，m 是每个 token 的文本长度
 pub fn tokenize_whitespace_split(source: String) -> RawSyntax {
     let tok = make_token(source, [], [])
     make_node([tok], [], [])
 }
 
+/// 判断字符是否为空白字符
+/// - ch: 字符
+/// 返回: 如果字符为空白则返回 true，否则返回 false
+/// 复杂度: O(1)
 fn is_whitespace_char(ch: String) -> Bool {
     if ch == " " { return true }
     if ch == "\t" { return true }
@@ -701,6 +986,10 @@ fn is_whitespace_char(ch: String) -> Bool {
     false
 }
 
+/// 判断字符是否为换行字符
+/// - ch: 字符
+/// 返回: 如果字符为换行则返回 true，否则返回 false
+/// 复杂度: O(1)
 fn is_newline_char(ch: String) -> Bool {
     if ch == "\n" { return true }
     if ch == "\r" { return true }
@@ -713,6 +1002,12 @@ fn is_newline_char(ch: String) -> Bool {
 // Get the string element at a specific index in an Array[String]
 // (Removed due to environment limitations)
 
+/// 将字符串片段提交为 trivia 列表
+/// - list: 当前 trivia 列表
+/// - kind: trivia 类型
+/// - text: trivia 文本
+/// 返回: 添加后的 trivia 列表
+/// 复杂度: O(1)
 fn commit_run_to_trivia_list(list: Array[Trivia], kind: String, text: String) -> Array[Trivia] {
     if text == "" { return list }
     if kind == "newline" {
@@ -722,6 +1017,11 @@ fn commit_run_to_trivia_list(list: Array[Trivia], kind: String, text: String) ->
     }
 }
 
+/// 将 trivia 添加到列表中最后一个 token 的后置
+/// - list: 原始 token 列表
+/// - trivias: 要添加的后置 trivia 数组
+/// 返回: 添加后的 token 列表
+/// 复杂度: O(n)，其中 n 是 token 数量
 fn append_trivia_to_last_token_in_list(list: Array[RawSyntax], trivias: Array[Trivia]) -> Array[RawSyntax] {
     let len = array_length(list)
     if len == 0 { return list }
@@ -740,6 +1040,10 @@ fn append_trivia_to_last_token_in_list(list: Array[RawSyntax], trivias: Array[Tr
     result
 }
 
+/// 简单打印测试
+/// - source: 源码字符串
+/// 返回: 打印后的文本字符串
+/// 复杂度: O(n * m)，其中 n 是源码长度，m 是每个 token 的文本长度
 pub fn roundtrip_print_simple(source: String) -> String {
     let root = tokenize_whitespace_only(source)
     lossless_print(root)
@@ -751,6 +1055,10 @@ pub fn roundtrip_print_simple(source: String) -> String {
 // - Move newline and everything after it from a token's trailing to the next token's leading
 // - If a token's leading contains no newline, move all its leading to the previous token's trailing
 // - First token keeps its leading; last token keeps its trailing
+/// 严格规范化 trivia 所有权
+/// - raw: 原始语法节点
+/// 返回: 规范化后的语法节点
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn normalize_trivia_ownership_strict(raw: RawSyntax) -> RawSyntax {
     // First, push node-level trivia into first/last tokens where possible
     let normalized = normalize_trivia_ownership(raw)
@@ -825,11 +1133,19 @@ pub fn normalize_trivia_ownership_strict(raw: RawSyntax) -> RawSyntax {
     rebuild_tree_with_updated_tokens(normalized, updated_tokens)
 }
 
+/// 严格规范化 trivia 所有权打印测试
+/// - raw: 原始语法节点
+/// 返回: 打印后的文本字符串
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn lossless_print_strict(raw: RawSyntax) -> String {
     let strict = normalize_trivia_ownership_strict(raw)
     rebuild_text(strict)
 }
 
+/// 严格规范化 trivia 所有权验证
+/// - raw: 原始语法节点
+/// 返回: 发现的错误信息数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn validate_trivia_ownership_strict(raw: RawSyntax) -> Array[String] {
     let tokens = collect_tokens(raw)
     let n = array_length(tokens)
@@ -867,6 +1183,10 @@ pub fn validate_trivia_ownership_strict(raw: RawSyntax) -> Array[String] {
 }
 
 // Collect tokens in preorder
+/// 收集语法树中的所有 token
+/// - raw: 根语法节点
+/// 返回: 所有 token 的数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn collect_tokens(raw: RawSyntax) -> Array[RawSyntax] {
     let nodes = preorder_traversal(raw)
     let mut result = []
@@ -879,11 +1199,22 @@ pub fn collect_tokens(raw: RawSyntax) -> Array[RawSyntax] {
 }
 
 // Rebuild tree from left-to-right updated token list
+/// 从左到右更新后的 token 列表重建语法树
+/// - raw: 原始语法节点
+/// - updated_tokens: 更新后的 token 列表
+/// 返回: 重建后的语法树根节点
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 fn rebuild_tree_with_updated_tokens(raw: RawSyntax, updated_tokens: Array[RawSyntax]) -> RawSyntax {
     let (rebuilt, _) = rebuild_tree_with_updated_tokens_impl(raw, updated_tokens, 0)
     rebuilt
 }
 
+/// 从左到右更新后的 token 列表重建语法树的递归实现
+/// - raw: 原始语法节点
+/// - updated_tokens: 更新后的 token 列表
+/// - start_index: 当前处理的 token 在 updated_tokens 中的起始索引
+/// 返回: 重建后的语法节点和下一个 token 的索引
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 fn rebuild_tree_with_updated_tokens_impl(raw: RawSyntax, updated_tokens: Array[RawSyntax], start_index: Int) -> (RawSyntax, Int) {
     if is_token(raw) {
         let updated = updated_tokens[start_index]
@@ -911,6 +1242,10 @@ fn rebuild_tree_with_updated_tokens_impl(raw: RawSyntax, updated_tokens: Array[R
 
 // ========== Trivia helpers ==========
 
+/// 检查 trivia 列表是否包含换行 trivia
+/// - trivia_list: trivia 列表
+/// 返回: 如果列表包含换行则返回 true，否则返回 false
+/// 复杂度: O(n)，其中 n 是 trivia 数量
 fn trivia_list_has_newline(trivia_list: Array[Trivia]) -> Bool {
     for t in trivia_list {
         if is_newline_trivia(t) { return true }
@@ -918,6 +1253,10 @@ fn trivia_list_has_newline(trivia_list: Array[Trivia]) -> Bool {
     false
 }
 
+/// 将 trivia 列表按换行符分割
+/// - trivia_list: trivia 列表
+/// 返回: 前缀 trivia 列表和换行及后续 trivia 列表
+/// 复杂度: O(n)，其中 n 是 trivia 数量
 fn split_trailing_at_first_newline(trivia_list: Array[Trivia]) -> (Array[Trivia], Array[Trivia]) {
     let mut prefix = []
     let mut rest = []
@@ -937,6 +1276,12 @@ fn split_trailing_at_first_newline(trivia_list: Array[Trivia]) -> (Array[Trivia]
     (prefix, rest)
 }
 
+/// 替换数组中的指定元素
+/// - arr: 原始数组
+/// - index: 要替换的元素索引
+/// - item: 新的元素
+/// 返回: 替换后的新数组
+/// 复杂度: O(n)，其中 n 是数组长度
 fn replace_trivia_array_at_index(arr: Array[Array[Trivia]], index: Int, item: Array[Trivia]) -> Array[Array[Trivia]] {
     let mut result = []
     let mut current_index = 0
@@ -951,12 +1296,20 @@ fn replace_trivia_array_at_index(arr: Array[Array[Trivia]], index: Int, item: Ar
     result
 }
 
+/// 计算 trivia 列表的长度
+/// - list: trivia 列表
+/// 返回: 列表长度
+/// 复杂度: O(n)，其中 n 是 trivia 数量
 fn array_length_trivia(list: Array[Trivia]) -> Int {
     let mut count = 0
     for _ in list { count = count + 1 }
     count
 }
 
+/// 计算数组的长度
+/// - list: 数组
+/// 返回: 数组长度
+/// 复杂度: O(n)，其中 n 是数组元素数量
 fn array_length_int(list: Array[Int]) -> Int {
     let mut count = 0
     for _ in list { count = count + 1 }
@@ -965,6 +1318,12 @@ fn array_length_int(list: Array[Int]) -> Int {
 
 // ==================== Node Manipulation Functions ====================
 
+/// 在指定索引插入子节点
+/// - raw: 原始语法节点
+/// - index: 插入位置
+/// - child: 要插入的子节点
+/// 返回: 插入后的新语法节点
+/// 复杂度: O(n)，其中 n 是子节点数量
 pub fn insert_child(raw: RawSyntax, index: Int, child: RawSyntax) -> RawSyntax {
     let children = syntax_children(raw)
     let new_children = insert_at_index(children, index, child)
@@ -978,6 +1337,11 @@ pub fn insert_child(raw: RawSyntax, index: Int, child: RawSyntax) -> RawSyntax {
     }
 }
 
+/// 移除指定索引的子节点
+/// - raw: 原始语法节点
+/// - index: 要移除的子节点索引
+/// 返回: 移除后的新语法节点
+/// 复杂度: O(n)，其中 n 是子节点数量
 pub fn remove_child(raw: RawSyntax, index: Int) -> RawSyntax {
     let children = syntax_children(raw)
     let new_children = remove_at_index(children, index)
@@ -991,6 +1355,11 @@ pub fn remove_child(raw: RawSyntax, index: Int) -> RawSyntax {
     }
 }
 
+/// 在末尾添加子节点
+/// - raw: 原始语法节点
+/// - child: 要添加的子节点
+/// 返回: 添加后的新语法节点
+/// 复杂度: O(1)
 pub fn append_child(raw: RawSyntax, child: RawSyntax) -> RawSyntax {
     let children = syntax_children(raw)
     let new_children = children + [child]
@@ -1004,6 +1373,11 @@ pub fn append_child(raw: RawSyntax, child: RawSyntax) -> RawSyntax {
     }
 }
 
+/// 在开头添加子节点
+/// - raw: 原始语法节点
+/// - child: 要添加的子节点
+/// 返回: 添加后的新语法节点
+/// 复杂度: O(1)
 pub fn prepend_child(raw: RawSyntax, child: RawSyntax) -> RawSyntax {
     let children = syntax_children(raw)
     let new_children = [child] + children
@@ -1018,6 +1392,13 @@ pub fn prepend_child(raw: RawSyntax, child: RawSyntax) -> RawSyntax {
 }
 
 // New: Replace a continuous range of children [start, end) with replacement
+/// 替换语法节点中指定范围内的子节点
+/// - raw: 原始语法节点
+/// - start: 开始索引
+/// - end: 结束索引
+/// - replacement: 替换的子节点数组
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(n)，其中 n 是子节点数量
 pub fn replace_children_range(raw: RawSyntax, start: Int, end: Int, replacement: Array[RawSyntax]) -> RawSyntax {
     let children = syntax_children(raw)
     let new_children = replace_range_in_array(children, start, end, replacement)
@@ -1032,11 +1413,24 @@ pub fn replace_children_range(raw: RawSyntax, start: Int, end: Int, replacement:
 }
 
 // New: Splice children by deleting delete_count starting at start and inserting `to_insert`
+/// 替换语法节点中指定范围内的子节点
+/// - raw: 原始语法节点
+/// - start: 开始索引
+/// - delete_count: 要删除的子节点数量
+/// - to_insert: 要插入的子节点数组
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(n)，其中 n 是子节点数量
 pub fn splice_children(raw: RawSyntax, start: Int, delete_count: Int, to_insert: Array[RawSyntax]) -> RawSyntax {
     replace_children_range(raw, start, start + delete_count, to_insert)
 }
 
 // New: Replace the text of a child token at a specific index (immutable)
+/// 替换语法节点中指定索引的子节点文本
+/// - raw: 原始语法节点
+/// - index: 子节点索引
+/// - new_text: 新的文本内容
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(n)，其中 n 是子节点数量
 pub fn replace_child_text_at(raw: RawSyntax, index: Int, new_text: String) -> RawSyntax {
     let children = syntax_children(raw)
     let mut new_children = []
@@ -1061,6 +1455,10 @@ pub fn replace_child_text_at(raw: RawSyntax, index: Int, new_text: String) -> Ra
 }
 
 // New: Strip whitespace trivia from token's leading
+/// 从 token 的前导移除空白 trivia
+/// - token: 原始 token
+/// 返回: 移除空白后的新 token
+/// 复杂度: O(1)
 pub fn strip_leading_whitespace_trivia(token: RawSyntax) -> RawSyntax {
     let leading = leading_trivia(token)
     let mut filtered = []
@@ -1073,6 +1471,10 @@ pub fn strip_leading_whitespace_trivia(token: RawSyntax) -> RawSyntax {
 }
 
 // New: Strip whitespace trivia from token's trailing
+/// 从 token 的后置移除空白 trivia
+/// - token: 原始 token
+/// 返回: 移除空白后的新 token
+/// 复杂度: O(1)
 pub fn strip_trailing_whitespace_trivia(token: RawSyntax) -> RawSyntax {
     let trailing = trailing_trivia(token)
     let mut filtered = []
@@ -1085,10 +1487,19 @@ pub fn strip_trailing_whitespace_trivia(token: RawSyntax) -> RawSyntax {
 }
 
 // New: Human-readable tree dump (for debugging)
+/// 以人类可读的格式打印语法树（用于调试）
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 打印后的字符串
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn debug_tree(raw: RawSyntax) -> String {
     debug_tree_impl(raw, 0)
 }
 
+/// 以人类可读的格式打印语法树（用于调试）的递归实现
+/// - raw: 当前语法节点
+/// - indent: 当前缩进级别
+/// 返回: 打印后的字符串
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 fn debug_tree_impl(raw: RawSyntax, indent: Int) -> String {
     // build indentation
     let mut prefix = ""
@@ -1115,11 +1526,21 @@ fn debug_tree_impl(raw: RawSyntax, indent: Int) -> String {
 
 // ==================== Error Recovery Functions ====================
 
+/// 创建一个错误恢复节点
+/// - expected: 预期的文本
+/// - found: 实际找到的文本
+/// 返回: 表示错误的 RawSyntax 节点
+/// 复杂度: O(1)
 pub fn create_error_recovery_node(expected: String, found: String) -> RawSyntax {
     let error_text = "Expected " + expected + ", found " + found
     make_error(error_text)
 }
 
+/// 将语法节点包装在错误恢复节点中
+/// - raw: 原始语法节点
+/// - context: 错误上下文描述
+/// 返回: 包装后的语法节点
+/// 复杂度: O(1)
 pub fn wrap_in_error_recovery(raw: RawSyntax, context: String) -> RawSyntax {
     let error_trivia = [comment_trivia("/* Error recovery: " + context + " */")]
     let leading = leading_trivia(raw) + error_trivia
@@ -1135,6 +1556,10 @@ pub fn wrap_in_error_recovery(raw: RawSyntax, context: String) -> RawSyntax {
 
 // ==================== Performance Optimization Functions ====================
 
+/// 优化语法节点的 trivia
+/// - raw: 原始语法节点
+/// 返回: 优化后的语法节点
+/// 复杂度: O(n * m)，其中 n 是 trivia 数量，m 是每个 trivia 的文本长度
 pub fn optimize_trivia(raw: RawSyntax) -> RawSyntax {
     let leading = optimize_trivia_list(leading_trivia(raw))
     let trailing = optimize_trivia_list(trailing_trivia(raw))
@@ -1148,6 +1573,10 @@ pub fn optimize_trivia(raw: RawSyntax) -> RawSyntax {
     }
 }
 
+/// 优化 trivia 列表，合并连续的空白 trivia
+/// - trivia_list: trivia 列表
+/// 返回: 优化后的 trivia 列表
+/// 复杂度: O(n * m)，其中 n 是 trivia 数量，m 是每个 trivia 的文本长度
 fn optimize_trivia_list(trivia_list: Array[Trivia]) -> Array[Trivia] {
     let mut result = []
     let mut current_whitespace = ""
@@ -1173,6 +1602,10 @@ fn optimize_trivia_list(trivia_list: Array[Trivia]) -> Array[Trivia] {
 
 // ==================== Syntax Tree Analysis Functions ====================
 
+/// 获取语法节点的深度
+/// - raw: 语法节点
+/// 返回: 节点深度
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn get_node_depth(raw: RawSyntax) -> Int {
     let children = syntax_children(raw)
     if array_length(children) == 0 {
@@ -1190,6 +1623,10 @@ pub fn get_node_depth(raw: RawSyntax) -> Int {
     max_depth + 1
 }
 
+/// 获取语法树的宽度
+/// - raw: 语法树根节点
+/// 返回: 树的宽度
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn get_tree_width(raw: RawSyntax) -> Int {
     let children = syntax_children(raw)
     if array_length(children) == 0 {
@@ -1204,10 +1641,18 @@ pub fn get_tree_width(raw: RawSyntax) -> Int {
     total_width
 }
 
+/// 检查语法节点是否为叶子节点（没有子节点）
+/// - raw: 语法节点
+/// 返回: 如果节点为叶子则返回 true，否则返回 false
+/// 复杂度: O(1)
 pub fn is_leaf_node(raw: RawSyntax) -> Bool {
     array_length(syntax_children(raw)) == 0
 }
 
+/// 获取语法树中的所有叶子节点
+/// - raw: 语法树根节点
+/// 返回: 所有叶子节点的数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn get_all_leaf_nodes(raw: RawSyntax) -> Array[RawSyntax] {
     if is_leaf_node(raw) {
         return [raw]
@@ -1224,8 +1669,12 @@ pub fn get_all_leaf_nodes(raw: RawSyntax) -> Array[RawSyntax] {
 
 // ==================== Additional Utility Functions ====================
 
-
-
+/// 在数组指定位置插入元素
+/// - arr: 原始数组
+/// - index: 插入位置
+/// - item: 要插入的元素
+/// 返回: 插入后的新数组
+/// 复杂度: O(n)，其中 n 是数组长度
 fn insert_at_index(arr: Array[RawSyntax], index: Int, item: RawSyntax) -> Array[RawSyntax] {
     let mut result = []
     let mut current_index = 0
@@ -1245,6 +1694,11 @@ fn insert_at_index(arr: Array[RawSyntax], index: Int, item: RawSyntax) -> Array[
     result
 }
 
+/// 从数组指定位置移除元素
+/// - arr: 原始数组
+/// - index: 要移除的元素索引
+/// 返回: 移除后的新数组
+/// 复杂度: O(n)，其中 n 是数组长度
 fn remove_at_index(arr: Array[RawSyntax], index: Int) -> Array[RawSyntax] {
     let mut result = []
     let mut current_index = 0
@@ -1260,6 +1714,13 @@ fn remove_at_index(arr: Array[RawSyntax], index: Int) -> Array[RawSyntax] {
 }
 
 // New: Replace a range in array [start, end) with replacement items
+/// 替换数组中指定范围内的元素
+/// - arr: 原始数组
+/// - start: 开始索引
+/// - end: 结束索引
+/// - replacement: 替换的元素数组
+/// 返回: 替换后的新数组
+/// 复杂度: O(n)，其中 n 是数组长度
 fn replace_range_in_array(arr: Array[RawSyntax], start: Int, end: Int, replacement: Array[RawSyntax]) -> Array[RawSyntax] {
     let mut result = []
     let mut index = 0
@@ -1286,19 +1747,30 @@ fn replace_range_in_array(arr: Array[RawSyntax], start: Int, end: Int, replaceme
 
 // ==================== Offsets, Equality, Path & Transform Utilities ====================
 
-// Compute length of a string by iterating its characters
+/// 计算字符串长度
+/// - s: 字符串
+/// 返回: 字符串长度
+/// 复杂度: O(n)，其中 n 是字符串字符数量
 fn string_length(s: String) -> Int {
     let mut len = 0
     for _ in s { len = len + 1 }
     len
 }
 
+/// 计算 trivia 列表的总文本长度
+/// - list: trivia 列表
+/// 返回: 列表总文本长度
+/// 复杂度: O(n * m)，其中 n 是 trivia 数量，m 是每个 trivia 的文本长度
 fn trivia_text_length(list: Array[Trivia]) -> Int {
     let mut len = 0
     for t in list { len = len + string_length(t.1) }
     len
 }
 
+/// 计算 token 的总文本长度
+/// - tok: 原始 token
+/// 返回: token 的总文本长度
+/// 复杂度: O(1)
 fn token_total_length(tok: RawSyntax) -> Int {
     let lead = trivia_text_length(leading_trivia(tok))
     let core = string_length(syntax_text(tok))
@@ -1307,17 +1779,29 @@ fn token_total_length(tok: RawSyntax) -> Int {
 }
 
 // Compute token offsets corresponding to lossless_print()
+/// 计算无损打印的 token 偏移量
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 所有 token 的偏移量数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn compute_token_offsets(raw: RawSyntax) -> Array[TokenRange] {
     let normalized = normalize_trivia_ownership(raw)
     compute_token_offsets_from_normalized(normalized)
 }
 
 // Compute token offsets corresponding to lossless_print_strict()
+/// 计算严格规范化打印的 token 偏移量
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 所有 token 的偏移量数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn compute_token_offsets_strict(raw: RawSyntax) -> Array[TokenRange] {
     let normalized = normalize_trivia_ownership_strict(raw)
     compute_token_offsets_from_normalized(normalized)
 }
 
+/// 从规范化后的语法树计算 token 偏移量
+/// - normalized: 规范化后的语法树根节点
+/// 返回: 所有 token 的偏移量数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 fn compute_token_offsets_from_normalized(normalized: RawSyntax) -> Array[TokenRange] {
     let tokens = collect_tokens(normalized)
     let mut result: Array[TokenRange] = []
@@ -1332,6 +1816,11 @@ fn compute_token_offsets_from_normalized(normalized: RawSyntax) -> Array[TokenRa
     result
 }
 
+/// 查找在指定偏移量处的 token
+/// - raw: 原始 RawSyntax 节点
+/// - offset: 偏移量
+/// 返回: 找到的 token，如果不存在则返回 None
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn find_token_at_offset(raw: RawSyntax, offset: Int) -> Option[RawSyntax] {
     let ranges = compute_token_offsets(raw)
     for entry in ranges {
@@ -1340,6 +1829,11 @@ pub fn find_token_at_offset(raw: RawSyntax, offset: Int) -> Option[RawSyntax] {
     None
 }
 
+/// 查找在指定偏移量处的 token（严格规范化）
+/// - raw: 原始 RawSyntax 节点
+/// - offset: 偏移量
+/// 返回: 找到的 token，如果不存在则返回 None
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn find_token_at_offset_strict(raw: RawSyntax, offset: Int) -> Option[RawSyntax] {
     let ranges = compute_token_offsets_strict(raw)
     for entry in ranges {
@@ -1349,6 +1843,11 @@ pub fn find_token_at_offset_strict(raw: RawSyntax, offset: Int) -> Option[RawSyn
 }
 
 // Structural equality (including trivia and missing flags)
+/// 语法树结构相等性检查
+/// - a: 语法节点 A
+/// - b: 语法节点 B
+/// 返回: 如果节点相等则返回 true，否则返回 false
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn structural_equal(a: RawSyntax, b: RawSyntax) -> Bool {
     if syntax_kind(a) != syntax_kind(b) { return false }
     if syntax_text(a) != syntax_text(b) { return false }
@@ -1368,6 +1867,11 @@ pub fn structural_equal(a: RawSyntax, b: RawSyntax) -> Bool {
     true
 }
 
+/// trivia 列表相等性检查
+/// - a: trivia 列表 A
+/// - b: trivia 列表 B
+/// 返回: 如果列表相等则返回 true，否则返回 false
+/// 复杂度: O(n * m)，其中 n 是 trivia 数量，m 是每个 trivia 的文本长度
 fn trivia_lists_equal(a: Array[Trivia], b: Array[Trivia]) -> Bool {
     if array_length_trivia(a) != array_length_trivia(b) { return false }
     let mut i = 0
@@ -1378,15 +1882,31 @@ fn trivia_lists_equal(a: Array[Trivia], b: Array[Trivia]) -> Bool {
     true
 }
 
+/// trivia 相等性检查
+/// - x: trivia 对象 A
+/// - y: trivia 对象 B
+/// 返回: 如果 trivia 相等则返回 true，否则返回 false
+/// 复杂度: O(1)
 fn trivia_equal(x: Trivia, y: Trivia) -> Bool {
     x.0 == y.0 && x.1 == y.1
 }
 
 // Find path (as child indices) to the first token whose text equals `text`
+/// 查找文本等于指定文本的 token 的路径
+/// - raw: 原始 RawSyntax 节点
+/// - text: 要匹配的文本内容
+/// 返回: 找到的路径，如果不存在则返回 None
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn find_path_to_token_text(raw: RawSyntax, text: String) -> Option[Array[Int]] {
     find_path_to_token_text_impl(raw, text, [])
 }
 
+/// 查找文本等于指定文本的 token 的路径的递归实现
+/// - raw: 当前语法节点
+/// - text: 要匹配的文本内容
+/// - prefix: 当前路径前缀
+/// 返回: 找到的路径，如果不存在则返回 None
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 fn find_path_to_token_text_impl(raw: RawSyntax, text: String, prefix: Array[Int]) -> Option[Array[Int]] {
     if is_token(raw) {
         if syntax_text(raw) == text { return Some(prefix) }
@@ -1405,6 +1925,11 @@ fn find_path_to_token_text_impl(raw: RawSyntax, text: String, prefix: Array[Int]
     None
 }
 
+/// 根据路径获取语法节点
+/// - raw: 原始 RawSyntax 节点
+/// - path: 路径（子节点索引数组）
+/// 返回: 找到的语法节点，如果不存在则返回 None
+/// 复杂度: O(n)，其中 n 是路径长度
 pub fn get_node_by_path(raw: RawSyntax, path: Array[Int]) -> Option[RawSyntax] {
     let mut current = raw
     for index in path {
@@ -1416,10 +1941,23 @@ pub fn get_node_by_path(raw: RawSyntax, path: Array[Int]) -> Option[RawSyntax] {
     Some(current)
 }
 
+/// 根据路径替换语法节点
+/// - raw: 原始 RawSyntax 节点
+/// - path: 路径（子节点索引数组）
+/// - replacement: 替换的语法节点
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(n)，其中 n 是路径长度
 pub fn replace_node_by_path(raw: RawSyntax, path: Array[Int], replacement: RawSyntax) -> RawSyntax {
     replace_node_by_path_impl(raw, path, 0, replacement)
 }
 
+/// 根据路径替换语法节点的递归实现
+/// - current: 当前语法节点
+/// - path: 路径（子节点索引数组）
+/// - depth: 当前深度
+/// - replacement: 替换的语法节点
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(n)，其中 n 是路径长度
 fn replace_node_by_path_impl(current: RawSyntax, path: Array[Int], depth: Int, replacement: RawSyntax) -> RawSyntax {
     if depth == array_length_int(path) {
         return replacement
@@ -1449,6 +1987,11 @@ fn replace_node_by_path_impl(current: RawSyntax, path: Array[Int], depth: Int, r
     }
 }
 
+/// 获取指定索引的子节点
+/// - children: 子节点数组
+/// - index: 子节点索引
+/// 返回: 找到的子节点，如果不存在则返回 None
+/// 复杂度: O(n)，其中 n 是子节点数量
 fn get_child_at_index(children: Array[RawSyntax], index: Int) -> Option[RawSyntax] {
     let mut i = 0
     for c in children {
@@ -1459,6 +2002,12 @@ fn get_child_at_index(children: Array[RawSyntax], index: Int) -> Option[RawSynta
 }
 
 // Replace all tokens whose text equals `from` with `to` (immutable)
+/// 替换语法树中所有文本等于指定文本的 token
+/// - raw: 原始 RawSyntax 节点
+/// - from: 要替换的文本
+/// - to: 替换后的文本
+/// 返回: 替换后的新语法节点
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn replace_tokens_text(raw: RawSyntax, from: String, to: String) -> RawSyntax {
     if is_token(raw) {
         if syntax_text(raw) == from {
@@ -1486,10 +2035,21 @@ pub fn replace_tokens_text(raw: RawSyntax, from: String, to: String) -> RawSynta
 
 // ==================== Additional Path Utilities ====================
 
+/// 查找所有文本等于指定文本的 token 的路径
+/// - raw: 原始 RawSyntax 节点
+/// - text: 要匹配的文本内容
+/// 返回: 所有找到的路径数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn find_paths_to_token_text_all(raw: RawSyntax, text: String) -> Array[Array[Int]] {
     find_paths_to_token_text_all_impl(raw, text, [])
 }
 
+/// 查找所有文本等于指定文本的 token 的路径的递归实现
+/// - raw: 当前语法节点
+/// - text: 要匹配的文本内容
+/// - prefix: 当前路径前缀
+/// 返回: 所有找到的路径数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 fn find_paths_to_token_text_all_impl(raw: RawSyntax, text: String, prefix: Array[Int]) -> Array[Array[Int]] {
     let mut results: Array[Array[Int]] = []
     if is_token(raw) {
@@ -1506,11 +2066,23 @@ fn find_paths_to_token_text_all_impl(raw: RawSyntax, text: String, prefix: Array
     results
 }
 
+/// 查找第 n 个 token 的路径
+/// - raw: 原始 RawSyntax 节点
+/// - n: 目标 token 的索引
+/// 返回: 找到的路径，如果不存在则返回 None
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn find_path_to_nth_token(raw: RawSyntax, n: Int) -> Option[Array[Int]] {
     let (found, _) = find_path_to_nth_token_impl(raw, n, [], 0)
     found
 }
 
+/// 查找第 n 个 token 的路径的递归实现
+/// - raw: 当前语法节点
+/// - target: 目标 token 的索引
+/// - prefix: 当前路径前缀
+/// - seen: 已找到的 token 数量
+/// 返回: 找到的路径和已找到的 token 数量
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 fn find_path_to_nth_token_impl(raw: RawSyntax, target: Int, prefix: Array[Int], seen: Int) -> (Option[Array[Int]], Int) {
     if is_token(raw) {
         if seen == target { return (Some(prefix), seen + 1) } else { return (None, seen + 1) }
@@ -1533,11 +2105,22 @@ fn find_path_to_nth_token_impl(raw: RawSyntax, target: Int, prefix: Array[Int], 
 }
 
 // Delete the node at the given path. If path is empty (root), returns the original tree.
+/// 根据路径删除语法节点
+/// - raw: 原始 RawSyntax 节点
+/// - path: 路径（子节点索引数组）
+/// 返回: 删除后的新语法节点
+/// 复杂度: O(n)，其中 n 是路径长度
 pub fn delete_node_by_path(raw: RawSyntax, path: Array[Int]) -> RawSyntax {
     if array_length_int(path) == 0 { return raw }
     delete_node_by_path_impl(raw, path, 0)
 }
 
+/// 根据路径删除语法节点的递归实现
+/// - current: 当前语法节点
+/// - path: 路径（子节点索引数组）
+/// - depth: 当前深度
+/// 返回: 删除后的新语法节点
+/// 复杂度: O(n)，其中 n 是路径长度
 fn delete_node_by_path_impl(current: RawSyntax, path: Array[Int], depth: Int) -> RawSyntax {
     let idx = path[depth]
     let children = syntax_children(current)
@@ -1570,10 +2153,25 @@ fn delete_node_by_path_impl(current: RawSyntax, path: Array[Int], depth: Int) ->
 }
 
 // Insert a child into the node located at `path`, at position `index`.
+/// 在指定路径的节点中插入子节点
+/// - raw: 原始 RawSyntax 节点
+/// - path: 路径（子节点索引数组）
+/// - index: 插入位置
+/// - new_child: 要插入的子节点
+/// 返回: 插入后的新语法节点
+/// 复杂度: O(n)，其中 n 是路径长度
 pub fn insert_node_at_path(raw: RawSyntax, path: Array[Int], index: Int, new_child: RawSyntax) -> RawSyntax {
     insert_node_at_path_impl(raw, path, 0, index, new_child)
 }
 
+/// 在指定路径的节点中插入子节点的递归实现
+/// - current: 当前语法节点
+/// - path: 路径（子节点索引数组）
+/// - depth: 当前深度
+/// - index: 插入位置
+/// - new_child: 要插入的子节点
+/// 返回: 插入后的新语法节点
+/// 复杂度: O(n)，其中 n 是路径长度
 fn insert_node_at_path_impl(current: RawSyntax, path: Array[Int], depth: Int, index: Int, new_child: RawSyntax) -> RawSyntax {
     if depth == array_length_int(path) {
         return insert_child(current, index, new_child)
@@ -1602,10 +2200,23 @@ fn insert_node_at_path_impl(current: RawSyntax, path: Array[Int], depth: Int, in
 }
 
 // Append a child into the node located at `path`.
+/// 在指定路径的节点中追加子节点
+/// - raw: 原始 RawSyntax 节点
+/// - path: 路径（子节点索引数组）
+/// - new_child: 要追加的子节点
+/// 返回: 追加后的新语法节点
+/// 复杂度: O(n)，其中 n 是路径长度
 pub fn append_node_at_path(raw: RawSyntax, path: Array[Int], new_child: RawSyntax) -> RawSyntax {
     append_node_at_path_impl(raw, path, 0, new_child)
 }
 
+/// 在指定路径的节点中追加子节点的递归实现
+/// - current: 当前语法节点
+/// - path: 路径（子节点索引数组）
+/// - depth: 当前深度
+/// - new_child: 要追加的子节点
+/// 返回: 追加后的新语法节点
+/// 复杂度: O(n)，其中 n 是路径长度
 fn append_node_at_path_impl(current: RawSyntax, path: Array[Int], depth: Int, new_child: RawSyntax) -> RawSyntax {
     if depth == array_length_int(path) {
         return append_child(current, new_child)
@@ -1634,6 +2245,10 @@ fn append_node_at_path_impl(current: RawSyntax, path: Array[Int], depth: Int, ne
 }
 
 // Structural fingerprint for hashed interning
+/// 为 trivia 列表生成哈希键
+/// - list: trivia 列表
+/// 返回: 哈希键字符串
+/// 复杂度: O(n * m)，其中 n 是 trivia 数量，m 是每个 trivia 的文本长度
 fn trivia_list_key_for_map(list: Array[Trivia]) -> String {
     let mut out = ""
     for t in list {
@@ -1642,6 +2257,10 @@ fn trivia_list_key_for_map(list: Array[Trivia]) -> String {
     out
 }
 
+/// 生成语法节点的结构指纹
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 结构指纹字符串
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 fn structural_fingerprint(raw: RawSyntax) -> String {
     let mut s = syntax_kind(raw)
     s = s + "#M:" + (if is_missing(raw) { "1" } else { "0" })
@@ -1657,6 +2276,7 @@ fn structural_fingerprint(raw: RawSyntax) -> String {
 
 // ==================== Arena-based Content Sharing (Interning) ====================
 
+/// 语法树节点存储区域
 pub struct Arena {
     tokens: Array[RawSyntax]
     nodes: Array[RawSyntax]
@@ -1664,22 +2284,40 @@ pub struct Arena {
     node_index: Map[String, RawSyntax]
 }
 
+/// 创建新的语法树节点存储区域
+/// 返回: 初始化后的 Arena
+/// 复杂度: O(1)
 pub fn new_arena() -> Arena {
     let empty_tok_index: Map[String, RawSyntax] = Map::of([])
     let empty_node_index: Map[String, RawSyntax] = Map::of([])
     Arena::{ tokens: [], nodes: [], token_index: empty_tok_index, node_index: empty_node_index }
 }
 
+/// 获取 Arena 中的 token 数量
+/// - arena: Arena
+/// 返回: token 数量
+/// 复杂度: O(1)
 pub fn arena_token_count(arena: Arena) -> Int {
     array_length(arena.tokens)
 }
 
+/// 获取 Arena 中的节点数量
+/// - arena: Arena
+/// 返回: 节点数量
+/// 复杂度: O(1)
 pub fn arena_node_count(arena: Arena) -> Int {
     array_length(arena.nodes)
 }
 
 // Intern a token. If an identical token already exists in the arena, reuse it.
 // Returns (updated_arena, interned_token)
+/// 在 Arena 中注册 token
+/// - arena: Arena
+/// - text: token 文本
+/// - leading: token 前导 trivia
+/// - trailing: token 后置 trivia
+/// 返回: 更新后的 Arena 和注册的 token
+/// 复杂度: O(1)
 pub fn arena_intern_token(arena: Arena, text: String, leading: Array[Trivia], trailing: Array[Trivia]) -> (Arena, RawSyntax) {
     let candidate = make_token(text, leading, trailing)
     let key = structural_fingerprint(candidate)
@@ -1700,6 +2338,13 @@ pub fn arena_intern_token(arena: Arena, text: String, leading: Array[Trivia], tr
 
 // Intern a node with given children and trivia. If identical node exists, reuse it.
 // Returns (updated_arena, interned_node)
+/// 在 Arena 中注册语法节点
+/// - arena: Arena
+/// - children: 语法节点的子节点
+/// - leading: 语法节点的前导 trivia
+/// - trailing: 语法节点的后置 trivia
+/// 返回: 更新后的 Arena 和注册的语法节点
+/// 复杂度: O(1)
 pub fn arena_intern_node(arena: Arena, children: Array[RawSyntax], leading: Array[Trivia], trailing: Array[Trivia]) -> (Arena, RawSyntax) {
     let candidate = make_node(children, leading, trailing)
     let key = structural_fingerprint(candidate)
@@ -1719,10 +2364,19 @@ pub fn arena_intern_node(arena: Arena, children: Array[RawSyntax], leading: Arra
 
 // ==================== Debug & Maintenance Utilities ====================
 
+/// 以人类可读的格式打印语法树（包含 trivia）
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 打印后的字符串
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 pub fn debug_tree_with_trivia(raw: RawSyntax) -> String {
     debug_tree_with_trivia_impl(raw, 0)
 }
 
+/// 以人类可读的格式打印语法树（包含 trivia）的递归实现
+/// - raw: 当前语法节点
+/// - indent: 当前缩进级别
+/// 返回: 打印后的字符串
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的文本长度
 fn debug_tree_with_trivia_impl(raw: RawSyntax, indent: Int) -> String {
     let mut prefix = ""
     let mut j = 0
@@ -1752,6 +2406,10 @@ fn debug_tree_with_trivia_impl(raw: RawSyntax, indent: Int) -> String {
     line
 }
 
+/// 将 trivia 列表转换为人类可读的字符串
+/// - list: trivia 列表
+/// 返回: 可读的字符串
+/// 复杂度: O(n * m)，其中 n 是 trivia 数量，m 是每个 trivia 的文本长度
 fn trivia_list_to_inline_string(list: Array[Trivia]) -> String {
     let mut out = ""
     let mut first = true
@@ -1763,6 +2421,10 @@ fn trivia_list_to_inline_string(list: Array[Trivia]) -> String {
 }
 
 // Aggregate validator: generic structural validation + strict trivia ownership check
+/// 聚合验证器：通用结构验证 + 严格 trivia 所有权检查
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 发现的错误信息数组
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn ensure_lossless_invariants(raw: RawSyntax) -> Array[String] {
     let errs1 = validate_syntax_tree(raw)
     let strict = normalize_trivia_ownership_strict(raw)
@@ -1771,6 +2433,10 @@ pub fn ensure_lossless_invariants(raw: RawSyntax) -> Array[String] {
 }
 
 // Remove all "missing" nodes recursively from a tree
+/// 递归移除树中的所有 "缺失" 节点
+/// - raw: 原始 RawSyntax 节点
+/// 返回: 移除缺失节点后的新语法节点
+/// 复杂度: O(n * m)，其中 n 是节点数量，m 是每个节点的子节点数量
 pub fn prune_missing_nodes(raw: RawSyntax) -> RawSyntax {
     if is_token(raw) || is_error(raw) { return raw }
     let children = syntax_children(raw)
@@ -1792,6 +2458,12 @@ pub fn prune_missing_nodes(raw: RawSyntax) -> RawSyntax {
 }
 
 // Reorder a child from one index to another (immutable)
+/// 将语法节点中的一个子节点重新排序到另一个位置（不可变）
+/// - raw: 原始 RawSyntax 节点
+/// - from_index: 原位置
+/// - to_index: 新位置
+/// 返回: 重新排序后的新语法节点
+/// 复杂度: O(n)，其中 n 是子节点数量
 pub fn move_child(raw: RawSyntax, from_index: Int, to_index: Int) -> RawSyntax {
     if from_index == to_index { return raw }
     let children = syntax_children(raw)
@@ -1819,10 +2491,20 @@ pub fn move_child(raw: RawSyntax, from_index: Int, to_index: Int) -> RawSyntax {
 // Extremely simple adapter that treats the entire source as one token.
 // This guarantees lossless roundtrip and provides a stable API surface
 // for future replacement with a real lexer without changing callers.
+/// 极简分词器适配器
+/// 将整个源码视为一个 token，确保无损回环并提供稳定的 API 表面
+/// 用于将来替换真实的分词器而无需更改调用者。
+/// - source: 源码字符串
+/// 返回: 分词后的语法树根节点
+/// 复杂度: O(n * m)，其中 n 是源码长度，m 是每个 token 的文本长度
 pub fn lex_minimal_build_tree(source: String) -> RawSyntax {
     tokenize_whitespace_split(source)
 }
 
+/// 极简分词器打印测试
+/// - source: 源码字符串
+/// 返回: 打印后的文本字符串
+/// 复杂度: O(n * m)，其中 n 是源码长度，m 是每个 token 的文本长度
 pub fn roundtrip_print_minilexer(source: String) -> String {
     let root = lex_minimal_build_tree(source)
     lossless_print(root)
